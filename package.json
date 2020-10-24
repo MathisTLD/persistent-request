@@ -1,0 +1,24 @@
+{
+  "name": "persistent-request",
+  "version": "0.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postversion": "npm publish && git push && git push --tags"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MathisTLD/persistent-request.git"
+  },
+  "author": "Mathis TLD",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/MathisTLD/persistent-request/issues"
+  },
+  "homepage": "https://github.com/MathisTLD/persistent-request#readme",
+  "dependencies": {
+    "debug": "^4.1.1",
+    "request": "^2.88.2"
+  }
+}
