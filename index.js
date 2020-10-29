@@ -44,7 +44,7 @@ class PersistentRequest extends EventEmitter {
       .on("error", (err) => {
         this.connected = false;
         // this.emit("error", err); // makes the whole thing crash
-        debug(`[${this.uri}] request failed with error ${error.code}`);
+        debug(`[${this.uri}] request failed with error ${err.code}`);
         this.reqError = err;
         this.reconnect();
       })
