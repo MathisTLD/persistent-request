@@ -11,7 +11,7 @@ class PersistentRequest extends EventEmitter {
         "persistent request should recieve a request options object as first argument"
       );
 
-    this.requestOptions = { ...requestOptions };
+    this.requestOptions = requestOptions;
     this.options = {
       ping: undefined,
       pingInterval: 1000,
