@@ -11,11 +11,12 @@ class PersistentRequest extends EventEmitter {
         "persistent request should recieve a request options object as first argument"
       );
 
-    this.requestOptions = requestOptions;
+    this.requestOptions = { ...requestOptions };
     this.options = {
       ping: undefined,
       pingInterval: 1000,
       reconnectInterval: 1000,
+      reconnectOnClose: false,
       ...options,
     };
 
@@ -25,8 +26,13 @@ class PersistentRequest extends EventEmitter {
     this.connected = false;
 
     this.connect();
+
+    // avoid uncaught error
+    this.on("error", () => {});
   }
   connect() {
+    this.destroyReq();
+
     this.nRequests++;
     this.reqError = null;
     debug(`[${this.uri}] trying to connect`);
@@ -36,14 +42,14 @@ class PersistentRequest extends EventEmitter {
         this.emit("request");
       })
       .on("response", (res) => {
-        this.emit("response", res);
-        debug(`[${this.uri}] connected`);
         this.connected = true;
         this.reconnecting = false;
+        this.emit("response", res);
+        debug(`[${this.uri}] connected`);
       })
       .on("error", (err) => {
         this.connected = false;
-        // this.emit("error", err); // makes the whole thing crash
+        this.emit("error", err);
         debug(`[${this.uri}] request failed with error ${err.code}`);
         this.reqError = err;
         this.reconnect();
@@ -51,18 +57,8 @@ class PersistentRequest extends EventEmitter {
       .on("close", () => {
         this.emit("close");
         this.connected = false;
-        if (!(this.reqError || req.req.destroyed)) {
-          debug(`[${this.uri}] connection closed`);
-          this.reconnect();
-        }
-      })
-      .on("finish", () => {
-        this.emit("finish");
-        this.connected = false;
-        if (!(this.reqError || req.destroyed)) {
-          debug(`[${this.uri}] connection finished`);
-          this.reconnect();
-        }
+        debug(`[${this.uri}] connection closed`);
+        if (this.options.reconnectOnClose) this.reconnect();
       })
       .on("data", (data) => {
         debug(`[${this.uri}] got data: ${data.length}`);
@@ -82,28 +78,28 @@ class PersistentRequest extends EventEmitter {
     this.req = req;
   }
   reconnect() {
-    if (this.reconnecting) return; // debug(`[${this.uri}] already trying to reconnect`);
+    if (this.reconnecting)
+      return debug(`[${this.uri}] already trying to reconnect`);
     debug(`[${this.uri}] trying to reconnect`);
     this.reconnecting = true;
     // stop req's ping interval
     clearInterval(this.req.pingInterval);
 
     let retrying = false;
-    let retry = () => {
+    const retry = () => {
       debug(`[${this.uri}] reconnecting`);
       retrying = true;
       this.emit("reconnect");
 
-      // destroy old req before
-      this.destroyReq();
-      // trying to reconnect
+      // stop trying to reconnect
       this.destroyReconnection();
 
       this.connect();
     };
-    let { ping, reconnectInterval } = this.options;
+    const { ping, reconnectInterval } = this.options;
 
     if (ping) {
+      clearInterval(this.reconnectInterval);
       this.reconnectInterval = setInterval(async () => {
         try {
           debug(`[${this.uri}] pre-reconnection ping`);
