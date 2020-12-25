@@ -66,15 +66,18 @@ class PersistentRequest extends EventEmitter {
       });
 
     let { ping, pingInterval } = this.options;
-    if (ping)
-      req.pingInterval = setInterval(async () => {
+    if (ping) {
+      const doPingTest = async () => {
         try {
           debug(`[${this.uri}] verifying ping`);
           await ping();
         } catch (e) {
           this.reconnect();
         }
-      }, pingInterval);
+      };
+      doPingTest();
+      req.pingInterval = setInterval(doPingTest, pingInterval);
+    }
     this.req = req;
   }
   reconnect() {
