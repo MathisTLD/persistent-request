@@ -1,53 +1,43 @@
-const { parentPort, workerData } = require("worker_threads");
+const path = require("path");
+const { Worker } = require("worker_threads");
 
-const options = {
-  wait: 0,
-  ...workerData,
+const server = {
+  error: null,
+  status: null,
+  worker: null,
 };
+module.exports = server;
 
-const http = require("http");
-
-const server = http.createServer((req, res) => {
-  setTimeout(() => {
-    if (req.url === "/ping") {
-      res.writeHead(200);
-      res.end();
-    } else {
-      res.writeHead(200);
-      setInterval(() => {
-        res.write("foo");
-      }, 100);
-    }
-  }, options.wait);
-});
-
-const sockets = new Set();
-server.setMaxListeners(0);
-server.on("connection", (socket) => {
-  sockets.add(socket);
-  server.once("close", () => {
-    sockets.delete(socket);
+server.start = async function startServer(options = {}) {
+  await server.stop();
+  const worker = new Worker(path.resolve(__dirname, "server-worker.js"), {
+    workerData: { wait: 0, ...options },
   });
-});
-
-function closeSockets() {
-  for (const socket of sockets) {
-    socket.destroy();
-    sockets.delete(socket);
+  server.worker = worker;
+  await new Promise((resolve) => worker.once("message", resolve));
+  server.status = "up";
+};
+server.stop = async function stopServer() {
+  if (server.worker) {
+    await server.worker.terminate();
+    server.status = "down";
   }
-}
-
-parentPort.on("message", (msg) => {
-  if (msg && msg.type) {
-    const { type } = msg;
-    if (type === "options") {
-      Object.assign(options, msg.options);
-    } else if (type === "close-all") {
-      closeSockets();
-    }
-  }
-});
-
-server.listen(8080, () => {
-  parentPort.postMessage("up");
-});
+};
+server.ping = function ping() {
+  return new Promise((resolve, reject) => {
+    let dateStart = Date.now();
+    let req = require("axios").request({
+      url: "http://localhost:8080/ping",
+      timeout: 200,
+    });
+    req
+      .then(() => {
+        server.error = null;
+        resolve();
+      })
+      .catch((err) => {
+        server.error = err;
+        reject(err);
+      });
+  });
+};

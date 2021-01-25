@@ -1,7 +1,9 @@
-const debug = require("debug")("persistent-request");
-
-const request = require("request");
+const axios = require("axios");
 const EventEmitter = require("events");
+const { PassThrough } = require("stream");
+
+const debug = require("debug");
+const printDebug = debug("persistent-request");
 
 class PersistentRequest extends EventEmitter {
   constructor(requestOptions, options = {}) {
@@ -13,17 +15,23 @@ class PersistentRequest extends EventEmitter {
 
     this.requestOptions = requestOptions;
     this.options = {
-      ping: undefined,
-      pingInterval: 1000,
-      reconnectInterval: 1000,
+      waitBeforeReconnection: 0,
       reconnectOnClose: false,
-      ...options,
+      keepaliveTime: 0,
     };
+    Object.assign(this.options, options);
 
     this.nRequests = 0;
 
-    this.reconnecting = false;
+    this.connecting = false;
     this.connected = false;
+    this.reconnecting = false;
+
+    this.destroyed = false;
+
+    this.data = new PassThrough();
+
+    this._reqSource = axios.CancelToken.source();
 
     this.connect();
 
@@ -31,112 +39,128 @@ class PersistentRequest extends EventEmitter {
     this.on("error", () => {});
   }
   connect() {
-    this.destroyReq();
+    if (this.destroyed) return this.debug("destroyed, can't connect");
+    this.abort();
 
     this.nRequests++;
     this.reqError = null;
-    debug(`[${this.uri}] trying to connect`);
 
-    let req = request(this.requestOptions)
-      .on("request", () => {
-        this.emit("request");
-      })
-      .on("response", (res) => {
+    this.connecting = true;
+    this.debug("connecting");
+    this.emit("connecting");
+
+    let req = axios
+      .request({ ...this.requestOptions, responseType: "stream" })
+      .then((res) => {
+        // handle success
         this.connected = true;
+        this.connecting = false;
         this.reconnecting = false;
+        this.debug("connected");
         this.emit("response", res);
-        debug(`[${this.uri}] connected`);
-      })
-      .on("error", (err) => {
-        this.connected = false;
-        this.emit("error", err);
-        debug(`[${this.uri}] request failed with error ${err.code}`);
-        this.reqError = err;
-        this.reconnect();
-      })
-      .on("close", () => {
-        this.emit("close");
-        this.connected = false;
-        debug(`[${this.uri}] connection closed`);
-        if (this.options.reconnectOnClose) this.reconnect();
-      })
-      .on("data", (data) => {
-        debug(`[${this.uri}] got data: ${data.length}`);
-        this.emit("data", data);
-      });
 
-    let { ping, pingInterval } = this.options;
-    if (ping) {
-      const doPingTest = async () => {
-        try {
-          debug(`[${this.uri}] verifying ping`);
-          await ping();
-        } catch (e) {
-          this.reconnect();
+        res.data.on("close", () => {
+          clearTimeout(this._keepaliveTimeout);
+          this.connected = false;
+          this.debug("connection closed");
+          this.emit("close");
+          if (!this.destroyed) this.reconnect();
+        });
+
+        this.once("abort", () => {
+          if (typeof res.data.destroy === "function") {
+            this.debug("destroying incoming message");
+            res.data.destroy();
+          }
+        });
+
+        if (this.options.keepaliveTime > 0) {
+          res.data.on("data", () => {
+            clearTimeout(this._keepaliveTimeout);
+            this._keepaliveTimeout = setTimeout(() => {
+              if (!this.destroyed) {
+                this.debug(
+                  `no data received during the minimum interval (${this.options.keepaliveTime}ms)`
+                );
+                this.reconnect(0);
+              }
+            }, this.options.keepaliveTime);
+          });
         }
-      };
-      doPingTest();
-      req.pingInterval = setInterval(doPingTest, pingInterval);
-    }
+
+        // TODO: res.data might not be a node stream so pipe should ne work as intended
+        res.data.pipe(this.data, { end: !this.options.reconnectOnClose });
+        // .on("data", (data) => {
+        //   debug(`[${this.uri}] got data: ${data.length}`);
+        //   this.emit("data", data);
+        // });
+      })
+      .catch((err) => {
+        // handle error
+        this.connected = false;
+        this.connecting = false;
+        this.reconnecting = false;
+        if (axios.isCancel(err)) {
+          this.debug("request canceled");
+        } else {
+          this.debug(`request failed with error ${err.code}`);
+          this.emit("error", err);
+          this.reqError = err;
+          if (!this.destroyed && this.reconnectOnError) this.reconnect();
+        }
+      });
+    // .then(function () {
+    //   // always executed
+    // });
+
     this.req = req;
   }
-  reconnect() {
-    if (this.reconnecting)
-      return debug(`[${this.uri}] already trying to reconnect`);
-    debug(`[${this.uri}] trying to reconnect`);
+  async reconnect(wait = -1) {
+    if (this.destroyed) return this.debug("destroyed, can't reconnect");
+    if (this.reconnecting) return this.debug("already trying to reconnect");
     this.reconnecting = true;
-    // stop req's ping interval
-    clearInterval(this.req.pingInterval);
 
-    let retrying = false;
-    const retry = () => {
-      debug(`[${this.uri}] reconnecting`);
-      retrying = true;
-      this.emit("reconnect");
+    wait = wait < 0 ? this.options.waitBeforeReconnection : wait;
 
-      // stop trying to reconnect
-      this.destroyReconnection();
+    this.debug(`will reconnect (${wait}ms)`);
+    this.emit("reconnecting");
 
-      this.connect();
-    };
-    const { ping, reconnectInterval } = this.options;
-
-    if (ping) {
-      clearInterval(this.reconnectInterval);
-      this.reconnectInterval = setInterval(async () => {
-        try {
-          debug(`[${this.uri}] pre-reconnection ping`);
-          await ping();
-          if (!retrying) retry();
-        } catch (e) {
-          if (!retrying)
-            debug(
-              `[${this.uri}] can't connect, will retry in ${reconnectInterval}ms`
-            );
-        }
-      }, reconnectInterval);
-    } else {
-      setTimeout(retry, reconnectInterval);
+    if (wait > 0) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, wait);
+      });
     }
+    if (this.destroyed)
+      return this.debug(
+        "destroyed before reconnection attempt, can't reconnect"
+      );
+    this.connect();
   }
   destroy() {
-    this.destroyReq();
-    this.destroyReconnection();
+    // set this.destroyed so code in #connect can know it should not reconnect
+    this.destroyed = true;
+    this.abort();
+    this.emit("destroy");
+
+    this.debug("destroyed");
   }
-  destroyReq() {
-    if (this.req) {
-      let req = this.req;
-      if (req.req) req.req.destroy();
-      clearInterval(req.pingInterval);
-      req.destroy();
-    }
+  abort() {
+    // FIXME: need to test this
+    this.emit("abort");
+    this._reqSource.cancel("aborted");
   }
-  destroyReconnection() {
-    clearInterval(this.reconnectInterval);
+  debug(msg) {
+    printDebug(`[${this.uri}] ${msg}`);
   }
   get uri() {
-    let { baseURL, url, uri } = this.requestOptions;
-    return (baseURL || "") + (url || uri);
+    let { baseURL, url } = this.requestOptions;
+    return (baseURL || "") + url;
+  }
+  static enableDebugging() {
+    debug.enable("persistent-request");
+  }
+  static get debug() {
+    return debug.enabled("persistent-request");
   }
 }
 

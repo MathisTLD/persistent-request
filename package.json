@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node test/index.js",
+    "test": "mocha 'test/**/*.test.js'",
     "postversion": "npm publish && git push && git push --tags"
   },
   "repository": {
@@ -18,7 +18,10 @@
   },
   "homepage": "https://github.com/MathisTLD/persistent-request#readme",
   "dependencies": {
-    "debug": "^4.1.1",
-    "request": "^2.88.2"
+    "axios": "^0.21.1",
+    "debug": "^4.1.1"
+  },
+  "devDependencies": {
+    "mocha": "^8.2.1"
   }
 }
