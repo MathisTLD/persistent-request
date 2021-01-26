@@ -1,1 +1,3 @@
-properly close connections (destroyReq)
+- properly close connections (destroyReq)
+
+- handle error event
