@@ -5,6 +5,8 @@ const { PassThrough } = require("stream");
 const debug = require("debug");
 const printDebug = debug("persistent-request");
 
+const adatper = require("axios/lib/adapters/http");
+
 class PersistentRequest extends EventEmitter {
   constructor(requestOptions, options = {}) {
     super();
@@ -48,7 +50,7 @@ class PersistentRequest extends EventEmitter {
     this.emit("connecting");
 
     let req = axios
-      .request({ ...this.requestOptions, responseType: "stream" })
+      .request({ ...this.requestOptions, adatper, responseType: "stream" })
       .then((res) => {
         // handle success
         this.connected = true;
