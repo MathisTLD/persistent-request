@@ -18,6 +18,7 @@ class PersistentRequest extends EventEmitter {
       waitBeforeReconnection: 0,
       reconnectOnClose: false,
       keepaliveTime: 0,
+      debugOnData: false,
     };
     Object.assign(this.options, options);
 
@@ -82,6 +83,11 @@ class PersistentRequest extends EventEmitter {
                 this.reconnect(0);
               }
             }, this.options.keepaliveTime);
+          });
+        }
+        if (this.options.debugOnData) {
+          res.data.on("data", (chunk) => {
+            this.debug(`data: ${chunk.length}`);
           });
         }
 
@@ -150,8 +156,19 @@ class PersistentRequest extends EventEmitter {
     printDebug(`[${this.uri}] ${msg}`);
   }
   get uri() {
-    let { baseURL, url } = this.requestOptions;
-    return (baseURL || "") + url;
+    let { baseURL, url, params: _params } = this.requestOptions;
+
+    let uri = (baseURL || "") + url;
+    if (_params) {
+      const params = new URLSearchParams(
+        Object.entries(_params).filter(
+          ([key, val]) => !(val === null || typeof val === "undefined")
+        )
+      );
+      const search = params.toString();
+      if (search) uri += `?${search}`;
+    }
+    return uri;
   }
   static enableDebugging() {
     debug.enable("persistent-request");
