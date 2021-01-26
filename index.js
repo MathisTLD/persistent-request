@@ -34,9 +34,6 @@ class PersistentRequest extends EventEmitter {
     this._reqSource = axios.CancelToken.source();
 
     this.connect();
-
-    // avoid uncaught error
-    this.on("error", () => {});
   }
   connect() {
     if (this.destroyed) return this.debug("destroyed, can't connect");
