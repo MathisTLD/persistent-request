@@ -1,4 +1,4 @@
-const PersistentRequest = require("../index");
+const PersistentRequest = require("../src");
 
 PersistentRequest.enableDebugging();
 

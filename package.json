@@ -2,9 +2,15 @@
   "name": "persistent-request",
   "version": "0.2.1",
   "description": "",
-  "main": "index.js",
+  "main": "src/index.js",
+  "browser": "dist/main.js",
+  "files": [
+    "dist/",
+    "src/"
+  ],
   "scripts": {
-    "test": "mocha 'test/**/*.test.js'",
+    "test": "mocha",
+    "build": "webpack",
     "postversion": "npm publish && git push && git push --tags"
   },
   "repository": {
@@ -22,6 +28,13 @@
     "debug": "^4.1.1"
   },
   "devDependencies": {
-    "mocha": "^8.2.1"
+    "buffer": "^6.0.3",
+    "html-webpack-plugin": "^4.5.1",
+    "http-browserify": "^1.7.0",
+    "mocha": "^8.2.1",
+    "stream-browserify": "^3.0.0",
+    "webpack": "^5.17.0",
+    "webpack-cli": "^4.4.0",
+    "webpack-dev-server": "^3.11.2"
   }
 }
