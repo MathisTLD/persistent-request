@@ -1,11 +1,11 @@
-const axios = require("axios");
 const EventEmitter = require("events");
 const { PassThrough } = require("stream");
 
 const debug = require("debug");
 const printDebug = debug("persistent-request");
 
-const adatper = require("axios/lib/adapters/http");
+const axios = require("axios");
+const adapter = require("./adapter");
 
 class PersistentRequest extends EventEmitter {
   constructor(requestOptions, options = {}) {
@@ -20,7 +20,7 @@ class PersistentRequest extends EventEmitter {
       waitBeforeReconnection: 0,
       reconnectOnClose: false,
       keepaliveTime: 0,
-      debugOnData: false,
+      debugOnData: false
     };
     Object.assign(this.options, options);
 
@@ -50,8 +50,8 @@ class PersistentRequest extends EventEmitter {
     this.emit("connecting");
 
     let req = axios
-      .request({ ...this.requestOptions, adatper, responseType: "stream" })
-      .then((res) => {
+      .request({ ...this.requestOptions, adapter, responseType: "stream" })
+      .then(res => {
         // handle success
         this.connected = true;
         this.connecting = false;
@@ -88,7 +88,7 @@ class PersistentRequest extends EventEmitter {
           });
         }
         if (this.options.debugOnData) {
-          res.data.on("data", (chunk) => {
+          res.data.on("data", chunk => {
             this.debug(`data: ${chunk.length}`);
           });
         }
@@ -100,7 +100,7 @@ class PersistentRequest extends EventEmitter {
         //   this.emit("data", data);
         // });
       })
-      .catch((err) => {
+      .catch(err => {
         // handle error
         this.connected = false;
         this.connecting = false;
@@ -131,7 +131,7 @@ class PersistentRequest extends EventEmitter {
     this.emit("reconnecting");
 
     if (wait > 0) {
-      await new Promise((resolve) => {
+      await new Promise(resolve => {
         setTimeout(resolve, wait);
       });
     }
