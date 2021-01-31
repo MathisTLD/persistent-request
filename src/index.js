@@ -1,5 +1,4 @@
 const EventEmitter = require("events");
-const { PassThrough } = require("stream");
 
 const debug = require("debug");
 const printDebug = debug("persistent-request");
@@ -20,7 +19,7 @@ class PersistentRequest extends EventEmitter {
       waitBeforeReconnection: 0,
       reconnectOnClose: false,
       keepaliveTime: 0,
-      debugOnData: false
+      debugOnData: false,
     };
     Object.assign(this.options, options);
 
@@ -32,15 +31,11 @@ class PersistentRequest extends EventEmitter {
 
     this.destroyed = false;
 
-    this.data = new PassThrough();
-
-    this._reqSource = axios.CancelToken.source();
-
     this.connect();
   }
   connect() {
     if (this.destroyed) return this.debug("destroyed, can't connect");
-    this.abort();
+    if (this.connecting || this.connected) this.abort();
 
     this.nRequests++;
     this.reqError = null;
@@ -49,9 +44,18 @@ class PersistentRequest extends EventEmitter {
     this.debug("connecting");
     this.emit("connecting");
 
+    const reqSource = axios.CancelToken.source();
+    this._reqSource = reqSource;
+    const cancelToken = this._reqSource.token;
+
     let req = axios
-      .request({ ...this.requestOptions, adapter, responseType: "stream" })
-      .then(res => {
+      .request({
+        ...this.requestOptions,
+        adapter,
+        responseType: "stream",
+        cancelToken,
+      })
+      .then((res) => {
         // handle success
         this.connected = true;
         this.connecting = false;
@@ -60,17 +64,16 @@ class PersistentRequest extends EventEmitter {
         this.emit("response", res);
 
         res.data.on("close", () => {
-          clearTimeout(this._keepaliveTimeout);
-          this.connected = false;
-          this.debug("connection closed");
-          this.emit("close");
-          if (!this.destroyed) this.reconnect();
-        });
-
-        this.once("abort", () => {
-          if (typeof res.data.destroy === "function") {
-            this.debug("destroying incoming message");
-            res.data.destroy();
+          if (reqSource === this._reqSource) {
+            // no new connection created
+            clearTimeout(this._keepaliveTimeout);
+            this.connected = false;
+            this.debug("connection closed");
+            this.emit("close");
+            if (!this.destroyed && this.options.reconnectOnClose)
+              this.reconnect();
+          } else {
+            this.debug("previous connection closed");
           }
         });
 
@@ -88,19 +91,12 @@ class PersistentRequest extends EventEmitter {
           });
         }
         if (this.options.debugOnData) {
-          res.data.on("data", chunk => {
+          res.data.on("data", (chunk) => {
             this.debug(`data: ${chunk.length}`);
           });
         }
-
-        // TODO: res.data might not be a node stream so pipe should ne work as intended
-        res.data.pipe(this.data, { end: !this.options.reconnectOnClose });
-        // .on("data", (data) => {
-        //   debug(`[${this.uri}] got data: ${data.length}`);
-        //   this.emit("data", data);
-        // });
       })
-      .catch(err => {
+      .catch((err) => {
         // handle error
         this.connected = false;
         this.connecting = false;
@@ -109,14 +105,11 @@ class PersistentRequest extends EventEmitter {
           this.debug("request canceled");
         } else {
           this.debug(`request failed with error ${err.code}`);
-          this.emit("error", err);
+          this.emit("request:error", err);
           this.reqError = err;
           if (!this.destroyed && this.reconnectOnError) this.reconnect();
         }
       });
-    // .then(function () {
-    //   // always executed
-    // });
 
     this.req = req;
   }
@@ -131,7 +124,7 @@ class PersistentRequest extends EventEmitter {
     this.emit("reconnecting");
 
     if (wait > 0) {
-      await new Promise(resolve => {
+      await new Promise((resolve) => {
         setTimeout(resolve, wait);
       });
     }
@@ -150,9 +143,13 @@ class PersistentRequest extends EventEmitter {
     this.debug("destroyed");
   }
   abort() {
+    this.debug("aborting connection");
     // FIXME: need to test this
+    if (this._reqSource) {
+      this._reqSource.cancel("aborted");
+      delete this._reqSource;
+    }
     this.emit("abort");
-    this._reqSource.cancel("aborted");
   }
   debug(msg) {
     printDebug(`[${this.uri}] ${msg}`);

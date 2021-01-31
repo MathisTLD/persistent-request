@@ -1,3 +1,7 @@
 - properly close connections (destroyReq)
 
-- handle error event
+# Fix
+
+## Fetch adapter
+
+got error `net::ERR_FAILED 200 (OK)` sometimes

@@ -23,7 +23,7 @@ describe("Keepalive Test", async function () {
   });
   after(async () => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    req.destroy();
+    // req already destroyed in last test
     await server.stop();
   });
 
@@ -54,7 +54,10 @@ describe("Keepalive Test", async function () {
   it("should reconnect when not recieving data within minimal interval", function () {
     return new Promise((resolve, reject) => {
       this.timeout(2000);
-      req.on("reconnecting", resolve);
+      req.on("reconnecting", () => {
+        resolve();
+        req.destroy();
+      });
     });
   });
 });
