@@ -11,6 +11,8 @@
   "scripts": {
     "test": "mocha",
     "build": "webpack",
+    "preversion": "npm run test",
+    "version": "npm run build",
     "postversion": "npm publish && git push && git push --tags"
   },
   "repository": {
