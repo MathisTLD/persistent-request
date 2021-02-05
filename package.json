@@ -1,6 +1,6 @@
 {
   "name": "persistent-request",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "",
   "main": "src/index.js",
   "browser": "dist/main.js",
