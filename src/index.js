@@ -10,7 +10,7 @@ class PersistentRequest extends EventEmitter {
   constructor(requestOptions, options = {}) {
     super();
     if (typeof requestOptions !== "object")
-      throw new Error(
+      throw new TypeError(
         "persistent request should recieve a request options object as first argument"
       );
 
@@ -38,7 +38,6 @@ class PersistentRequest extends EventEmitter {
     if (this.connecting || this.connected) this.abort();
 
     this.nRequests++;
-    this.reqError = null;
 
     this.connecting = true;
     this.debug("connecting");
@@ -104,9 +103,12 @@ class PersistentRequest extends EventEmitter {
         if (axios.isCancel(err)) {
           this.debug("request canceled");
         } else {
-          this.debug(`request failed with error ${err.code}`);
+          this.debug(`request failed: ${err.message}`);
           this.emit("request:error", err);
-          this.reqError = err;
+          if (err.response) {
+            // server responded but with an error so we should emit an error event
+            this.emit("error", err);
+          }
           if (!this.destroyed && this.reconnectOnError) this.reconnect();
         }
       });

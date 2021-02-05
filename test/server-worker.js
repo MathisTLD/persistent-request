@@ -2,6 +2,7 @@ const { parentPort, workerData } = require("worker_threads");
 
 const options = {
   wait: 0,
+  port: 0,
   ...workerData,
 };
 
@@ -12,7 +13,7 @@ const server = http.createServer((req, res) => {
     if (req.url === "/ping") {
       res.writeHead(200);
       res.end();
-    } else {
+    } else if (req.url === "/stream") {
       res.writeHead(200);
       const writeInterval = setInterval(() => {
         res.write("foo");
@@ -22,6 +23,9 @@ const server = http.createServer((req, res) => {
           clearInterval(writeInterval);
         }, options.stopDataTimeout);
       }
+    } else {
+      res.writeHead(404);
+      res.end();
     }
   }, options.wait);
 });
@@ -53,6 +57,6 @@ parentPort.on("message", (msg) => {
   }
 });
 
-server.listen(8080, () => {
-  parentPort.postMessage("up");
+server.listen(options.port, () => {
+  parentPort.postMessage({ port: server.address().port });
 });

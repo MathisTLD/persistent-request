@@ -4,14 +4,15 @@ PersistentRequest.enableDebugging();
 
 const server = require("./server");
 
-describe("Keepalive Test", async function () {
+describe("Keepalive", async function () {
   let req;
 
   before(async () => {
     await server.start();
     req = new PersistentRequest(
       {
-        url: "http://localhost:8080/stream",
+        baseURL: server.url,
+        url: "/stream",
         timeout: 200,
       },
       {
