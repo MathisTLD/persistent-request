@@ -245,7 +245,7 @@ function fetchAdapter(config) {
     if (controller) {
       // Handle request timeout
       if (config.timeout) {
-        req.setTimeout(config.timeout, function handleRequestTimeout() {
+        setTimeout(function handleRequestTimeout() {
           controller.abort();
           reject(
             createError(
@@ -255,7 +255,7 @@ function fetchAdapter(config) {
               request
             )
           );
-        });
+        }, config.timeout);
       }
 
       if (config.cancelToken) {
