@@ -77,17 +77,23 @@ class PersistentRequest extends EventEmitter {
         });
 
         if (this.options.keepaliveTime > 0) {
-          res.data.on("data", () => {
-            clearTimeout(this._keepaliveTimeout);
-            this._keepaliveTimeout = setTimeout(() => {
+          let timeout;
+          const resetTimeout = () => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
               if (!this.destroyed) {
                 this.debug(
                   `no data received during the minimum interval (${this.options.keepaliveTime}ms)`
                 );
                 this.reconnect(0);
               }
-            }, this.options.keepaliveTime);
+            }, this.options.keepaliveTime * 2);
+          };
+          res.data.on("data", resetTimeout); // Shannon criteria (never exactly <keepaliveTime> ms between packets)
+          res.data.once("close", () => {
+            clearTimeout(timeout);
           });
+          resetTimeout();
         }
         if (this.options.debugOnData) {
           res.data.on("data", (chunk) => {
