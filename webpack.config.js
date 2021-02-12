@@ -3,7 +3,7 @@ const webpack = require("webpack");
 
 module.exports = {
   mode: "production",
-  entry: path.resolve(__dirname, "src"),
+  entry: path.resolve(__dirname, "lib"),
   output: {
     library: "PersistentRequest",
     libraryTarget: "umd",

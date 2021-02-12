@@ -1,4 +1,4 @@
-const PersistentRequest = require("../src");
+const PersistentRequest = require("../lib");
 
 PersistentRequest.enableDebugging();
 
