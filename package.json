@@ -9,7 +9,7 @@
   "files": [
     "dist/",
     "lib/",
-    "./index.js"
+    "index.js"
   ],
   "scripts": {
     "test": "mocha",
